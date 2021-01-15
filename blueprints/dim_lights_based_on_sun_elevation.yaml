@@ -13,7 +13,7 @@ blueprint:
             domain: light
     max_brightness:
       name: Maximum brightness percent
-      description: Brightness of the light when max dimmed
+      description: Brightness to set as the maximum brightness
       default: 100
       selector:
         number:
@@ -24,7 +24,7 @@ blueprint:
           step: 1
     min_brightness:
       name: Minimum brightnes percent
-      description: Brightness of the light when max dimmed.
+      description: Brightness to set as the minimum brightness
       default: 1
       selector:
         number:
