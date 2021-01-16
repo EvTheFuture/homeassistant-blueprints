@@ -121,6 +121,7 @@ variables:
           {%- set data.e = data.e + [e] -%} 
         {%- endif -%}
       {% endfor %}
+      {{ data.e }}
     {%- endif -%}
 
   current_states: >-
@@ -241,7 +242,6 @@ action:
             logger: homeassistant.components.blueprint.dim_lights_based_on_sun_elevation
             message: "{{ error_msg }}"
     default:
-      #- service: telegram_bot.send_message
       - service: system_log.write
         data:
           level: debug
