@@ -1,6 +1,11 @@
 blueprint:
   name: Dim lights based on sun elevation
-  description: Adjust brightness of lights based on the current sun elevation
+  description: >-
+    Adjust brightness of lights based on the current sun elevation.
+    If force debug is enabled, you need to execute this automation manually 
+    or let Home Assitant restart before the change take effect.
+
+    PLEASE NOTE that Force debug is a GLOBAL setting afecting all automations using this Blueprint.
   source_url: https://github.com/EvTheFuture/homeassistant-blueprints/blob/master/blueprints/dim_lights_based_on_sun_elevation.yaml
   domain: automation
   input:
@@ -85,8 +90,19 @@ blueprint:
           unit_of_measurement: "°"
           mode: slider
           step: 0.5
+    debugging:
+      name: Debug logging
+      description: >-
+        Turn on debugging of this and all other automations using this Blueprint.
+        In order for this to take effect you need to manually trigger (EXECUTE) this automation
+        or let Home Assistant restart before debug will be turned on/off.
+        PLEASE NOTE that this is a GLOBAL setting for affecting all automations based on this Blueprint.
+      default: False
+      selector:
+        boolean:
 
 variables:
+  debugging: !input debugging
   target_lights: !input target_lights
   entity_list: >-
     {%- if target_lights.entity_id is string -%}
@@ -223,7 +239,6 @@ trigger:
     event_data:
       domain: light
       service: turn_on
-      #service_data: !input target_lights
   - platform: homeassistant
     event: start
 
@@ -234,14 +249,30 @@ action:
   - choose:
     - conditions:
       - condition: template
-        value_template: "{{ error_msg|length }}"
+        value_template: "{{ trigger is not defined }}"
       sequence:
-        - service: system_log.write
-          data:
-            level: error
-            logger: homeassistant.components.blueprint.dim_lights_based_on_sun_elevation
-            message: "{{ error_msg }}"
+      - service: logger.set_level
+        data:
+          homeassistant.components.blueprint.dim_lights_based_on_sun_elevation: "{% if debugging %}DEBUG{% else %}INFO{% endif %}"
+    - conditions:
+      - condition: template
+        value_template: "{{ debugging and trigger.platform == 'homeassistant' and trigger.event == 'start' }}"
+      sequence:
+      - service: logger.set_level
+        data:
+          homeassistant.components.blueprint.dim_lights_based_on_sun_elevation: DEBUG
     default:
+    - choose:
+      - conditions:
+        - condition: template
+          value_template: "{{ error_msg|length }}"
+        sequence:
+          - service: system_log.write
+            data:
+              level: error
+              logger: homeassistant.components.blueprint.dim_lights_based_on_sun_elevation
+              message: "{{ error_msg }}"
+      default:
       - service: system_log.write
         data:
           level: debug
@@ -279,28 +310,28 @@ action:
             complete event data: {{ trigger.event.data }})\n
             {% endif %}
             "
-  - choose:
-    - conditions: 
-      - condition: template
-        value_template: "{{ not skip_event and turn_off_entities|length > 0 }}"
-      sequence:
-        - service: light.turn_off
-          data:
-            entity_id: "{{ turn_off_entities }}"
-    - conditions:
-      - condition: template
-        value_template: "{{ not skip_event and turn_on_entities|length > 0 }}"
-      sequence:
-        - service: light.turn_on
-          data:
-            entity_id: "{{ turn_on_entities }}"
-    - conditions:
-      - condition: template
-        value_template: "{{ not skip_event and dim_entities|length > 0 }}"
-      sequence:
-        - service: light.turn_on
-          data:
-            entity_id: "{{ dim_entities }}"
-            brightness: "{{ brightness }}"
-    default: []
- 
+      - choose:
+        - conditions: 
+          - condition: template
+            value_template: "{{ not skip_event and turn_off_entities|length > 0 }}"
+          sequence:
+            - service: light.turn_off
+              data:
+                entity_id: "{{ turn_off_entities }}"
+        - conditions:
+          - condition: template
+            value_template: "{{ not skip_event and turn_on_entities|length > 0 }}"
+          sequence:
+            - service: light.turn_on
+              data:
+                entity_id: "{{ turn_on_entities }}"
+        - conditions:
+          - condition: template
+            value_template: "{{ not skip_event and dim_entities|length > 0 }}"
+          sequence:
+            - service: light.turn_on
+              data:
+                entity_id: "{{ dim_entities }}"
+                brightness: "{{ brightness }}"
+        default: []
+   
