@@ -90,6 +90,16 @@ blueprint:
           unit_of_measurement: "°"
           mode: slider
           step: 0.5
+    transition_time:
+      name: Transition time in seconds between brightness values
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 5
+          unit_of_measurement: "s"
+          mode: slider
+          step: 0.25
     debugging:
       name: Debug logging
       description: >-
@@ -111,6 +121,7 @@ variables:
       {{ target_lights.entity_id }}
     {%- endif -%}
 
+  transition_time: !input transition_time
   turn_on: !input turn_on
   turn_off: !input turn_off
   start_setting: !input start_elevation_setting
@@ -242,8 +253,8 @@ trigger:
   - platform: homeassistant
     event: start
 
-#mode: queued
-mode: single
+mode: queued
+#mode: single
 
 action:
   - choose:
@@ -333,5 +344,6 @@ action:
               data:
                 entity_id: "{{ dim_entities }}"
                 brightness: "{{ brightness }}"
+                transition: "{{ transition_time }}"
         default: []
    
