@@ -101,7 +101,8 @@ blueprint:
     debugging:
       name: Debug logging
       description: >-
-        Turn on debugging of this and all other automations using this Blueprint.
+        WARNING: Don't enable this unless you have activated 'logger' in your configuration.yaml file.
+        Turn on debugging of this automation.
         In order for this to take effect you need to manually trigger (EXECUTE) this automation
         or let Home Assistant restart before debug will be turned on/off.
       default: False
@@ -221,12 +222,14 @@ variables:
             AND
             * current brightness is equal to last set brightness (has not been changed by the user)
         #}
-        {%- if trigger_is_event and not is_on and e in affected_entities -%}
-          {%- set data.entities = data.entities + [e] -%}
-        {%- elif can_dim and force_turn_on -%}
-          {%- set data.entities = data.entities + [e] -%}
-        {%- elif can_dim and is_on and current_brightness != brightness and current_brightness == last_brightness -%}
-          {%- set data.entities = data.entities + [e] -%}
+        {%- if e in affected_entities -%}
+          {%- if trigger_is_event and not is_on -%}
+            {%- set data.entities = data.entities + [e] -%}
+          {%- elif can_dim and force_turn_on -%}
+            {%- set data.entities = data.entities + [e] -%}
+          {%- elif can_dim and is_on and current_brightness != brightness and current_brightness == last_brightness -%}
+            {%- set data.entities = data.entities + [e] -%}
+          {%- endif -%}
         {%- endif -%}
       {%- endfor -%}
       {{ data.entities }}
@@ -257,11 +260,11 @@ action:
   - choose:
     - conditions:
       - condition: template
-        value_template: "{{ trigger is not defined }}"
+        value_template: "{{ debugging && trigger is not defined }}"
       sequence:
       - service: logger.set_level
         data:
-          homeassistant.components.blueprint.dim_lights_based_on_sun_elevation: "{% if debugging %}DEBUG{% else %}INFO{% endif %}"
+          homeassistant.components.blueprint.dim_lights_based_on_sun_elevation: DEBUG
     - conditions:
       - condition: template
         value_template: "{{ debugging and trigger.platform == 'homeassistant' and trigger.event == 'start' }}"
