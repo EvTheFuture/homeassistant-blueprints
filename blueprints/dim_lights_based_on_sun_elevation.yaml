@@ -260,7 +260,7 @@ action:
   - choose:
     - conditions:
       - condition: template
-        value_template: "{{ debugging && trigger is not defined }}"
+        value_template: "{{ debugging and trigger is not defined }}"
       sequence:
       - service: logger.set_level
         data:
