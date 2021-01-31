@@ -140,8 +140,13 @@ variables:
     {%- elif trigger is not defined or trigger.platform != 'event' or trigger.event.data.service_data is not defined or trigger.event.data.service_data.entity_id is not defined -%}
       {{ entity_list }}
     {%- else -%}
+      {%- if trigger.event.data.service_data.entity_id is string -%}
+        {%- set eids = [trigger.event.data.service_data.entity_id] -%}
+      {%- else -%}
+        {%- set eids = trigger.event.data.service_data.entity_id -%}
+      {%- endif -%}
       {%- set data = namespace(e=[]) -%}
-      {%- for e in trigger.event.data.service_data.entity_id -%}
+      {%- for e in eids -%}
         {%- if e in entity_list -%}
           {%- set data.e = data.e + [e] -%} 
         {%- endif -%}
@@ -211,6 +216,7 @@ variables:
       {%- for e in entity_list -%}
         {%- set current_brightness = state_attr(e, 'brightness') -%} 
         {%- set is_on = states(e) == 'on' -%}
+        {%- set last_changed = (now() - states[e].last_changed) -%}
         {%- set can_dim = state_attr(e, 'supported_features')|bitwise_and(1)|bitwise_or(not is_on) -%}
         {#
           Set brightness and turn on if
@@ -223,7 +229,7 @@ variables:
             * current brightness is equal to last set brightness (has not been changed by the user)
         #}
         {%- if e in affected_entities -%}
-          {%- if trigger_is_event and not is_on -%}
+          {%- if trigger_is_event and (not is_on or (is_on and last_changed.seconds < 2)) -%}
             {%- set data.entities = data.entities + [e] -%}
           {%- elif can_dim and force_turn_on -%}
             {%- set data.entities = data.entities + [e] -%}
@@ -321,9 +327,9 @@ action:
                   to:   (elevation: {{ trigger.to_state.attributes.elevation }}, azimuth: {{ trigger.to_state.attributes.azimuth }})\n
                   {% endif %}
                   {% if trigger is defined and trigger.platform == 'event' -%}
-                  entity_id: {{ trigger.event.data.service_data.entity_id }})\n
-                  service_data_length: {{ trigger.event.data.service_data|length }})\n
-                  complete event data: {{ trigger.event.data }})\n
+                  entity_id: {{ trigger.event.data.service_data.entity_id }}\n
+                  service_data_length: {{ trigger.event.data.service_data|length }}\n
+                  complete event data: {{ trigger.event.data }}\n
                   {% endif %}
                   "
         default: []
