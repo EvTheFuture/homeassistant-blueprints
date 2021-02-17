@@ -36,6 +36,20 @@ blueprint:
           unit_of_measurement: "%"
           mode: slider
           step: 1
+    allowance:
+      name: Change Allowance
+      description: >-
+        How much can the brightnes be changed without this automation stop updating the brightness.
+        If set to 0% this automation will stop update the brightness if the brightness has been changed at all since the last triggering of this automation.
+        If set to 100% this automation will keep on and update the brightness even if you have manually changed the brightness to any other value since the last trigger.
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 100
+          unit_of_measurement: "%"
+          mode: slider
+          step: 1
     turn_on:
       name: Turn on lights automatically
       description: Turn on lights when sun is setting.
@@ -110,6 +124,8 @@ blueprint:
         boolean:
 
 variables:
+  allowance_input: !input allowance
+  allowance_value: "{{ allowance_input * 2.54 }}"
   debugging: !input debugging
   target_lights: !input target_lights
   entity_list: >-
@@ -226,14 +242,14 @@ variables:
           OR
             * dimming is supported by the entity AND light is ON AND the current brightness differ from the new brightness
             AND
-            * current brightness is equal to last set brightness (has not been changed by the user)
+            * current brightness is equal to last set brightness (has not been changed by the user within the allowance)
         #}
         {%- if e in affected_entities -%}
           {%- if trigger_is_event and (not is_on or (is_on and last_changed.seconds < 2)) -%}
             {%- set data.entities = data.entities + [e] -%}
           {%- elif can_dim and force_turn_on -%}
             {%- set data.entities = data.entities + [e] -%}
-          {%- elif can_dim and is_on and current_brightness != brightness and current_brightness == last_brightness -%}
+          {%- elif can_dim and is_on and current_brightness != brightness and (current_brightness - last_brightness)|abs <= allowance_value -%}
             {%- set data.entities = data.entities + [e] -%}
           {%- endif -%}
         {%- endif -%}
@@ -302,6 +318,7 @@ action:
                 message: "
                   DEBUG:\n
                   skip_event: {{ skip_event }}\n
+                  allowance_value: {{ allowance_value }}\n
                   affected_entities: {{ affected_entities }}\n\n
                   elevation: {{ elevation }} ({% if rising %}{{ start_rising ~ ', ' ~ end_rising }}{% else %}{{ start_setting ~ ', ' ~ end_setting }}{% endif %})\n
                   {% if last_elevation != \"\" -%}last elevation: {{ last_elevation }}\n{% endif %}
