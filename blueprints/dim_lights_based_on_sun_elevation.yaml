@@ -2,7 +2,7 @@ blueprint:
   name: Dim lights based on sun elevation
   description: >-
     Adjust brightness of lights based on the current sun elevation.
-    If force debug is enabled, you need to execute this automation manually 
+    If force debug is enabled, you need to execute this automation manually
     or let Home Assitant restart before the change take effect.
   source_url: https://github.com/EvTheFuture/homeassistant-blueprints/blob/master/blueprints/dim_lights_based_on_sun_elevation.yaml
   domain: automation
@@ -164,7 +164,7 @@ variables:
       {%- set data = namespace(e=[]) -%}
       {%- for e in eids -%}
         {%- if e in entity_list -%}
-          {%- set data.e = data.e + [e] -%} 
+          {%- set data.e = data.e + [e] -%}
         {%- endif -%}
       {% endfor %}
       {{ data.e }}
@@ -181,7 +181,7 @@ variables:
   error_msg: >-
     {%- if start_setting|float <= end_setting|float -%}
       {{ 'Start elevation must be greater than end evevation when the sun is setting' }}
-    {%- elif start_rising|float >= end_rising|float -%} 
+    {%- elif start_rising|float >= end_rising|float -%}
       {{ 'End elevation must be greater than start evevation when the sun is rising' }}
     {%- elif entity_list|length == 0 -%}
       {{ 'No valid entites specified or found' }}
@@ -219,7 +219,7 @@ variables:
       {%- set data = namespace(entities=[]) -%}
       {%- for e in entity_list -%}
         {%- if not state_attr(e, 'supported_features')|bitwise_and(1) -%}
-          {%- set data.entities = data.entities + [e] -%} 
+          {%- set data.entities = data.entities + [e] -%}
         {%- endif -%}
       {%- endfor -%}
       {{ data.entities }}
@@ -230,7 +230,7 @@ variables:
   dim_entities: >-
       {%- set data = namespace(entities=[]) -%}
       {%- for e in entity_list -%}
-        {%- set current_brightness = state_attr(e, 'brightness') -%} 
+        {%- set current_brightness = state_attr(e, 'brightness') -%}
         {%- set is_on = states(e) == 'on' -%}
         {%- set last_changed = (now() - states[e].last_changed) -%}
         {%- set can_dim = state_attr(e, 'supported_features')|bitwise_and(1)|bitwise_or(not is_on) -%}
