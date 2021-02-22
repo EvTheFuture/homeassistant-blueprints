@@ -125,7 +125,7 @@ blueprint:
 
 variables:
   allowance_input: !input allowance
-  allowance_value: "{{ allowance_input * 2.54 }}"
+  allowance_value: "{{ allowance_input|float * 2.54 }}"
   debugging: !input debugging
   target_lights: !input target_lights
   entity_list: >-
