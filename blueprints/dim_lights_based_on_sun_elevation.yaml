@@ -36,6 +36,12 @@ blueprint:
           unit_of_measurement: "%"
           mode: slider
           step: 1
+    reverse:
+      name: Reverse brightness
+      description: If checked, light will start dim when sun starts to set (start elevation value) and will be at full brightness when the elevation has reached the end elevation value.
+      default: False
+      selector:
+        boolean:
     allowance:
       name: Change Allowance
       description: >-
@@ -138,6 +144,7 @@ variables:
   transition_time: !input transition_time
   turn_on: !input turn_on
   turn_off: !input turn_off
+  reverse: !input reverse
   start_setting: !input start_elevation_setting
   start_rising: !input start_elevation_rising
   end_setting: !input end_elevation_setting
@@ -187,26 +194,37 @@ variables:
       {{ 'No valid entites specified or found' }}
     {%- endif -%}
 
-  rising: "{{ state_attr('sun.sun', 'rising') }}"
-  elevation: "{{ state_attr('sun.sun', 'elevation') }}"
-  last_elevation: >-
+  has_last: >-
     {% if trigger is defined and trigger.platform == 'state' and trigger.from_state.entity_id == 'sun.sun' -%}
-      {{trigger.from_state.attributes.elevation}}
+      {{ True }}
+    {% else %}
+      {{ False }}
     {% endif %}
+
+  rising: "{{ state_attr('sun.sun', 'rising') }}"
+  last_rising: "{% if has_last %}{{ trigger.from_state.attributes.rising }}{% else %}{{ rising }}{% endif %}"
+  elevation: "{{ state_attr('sun.sun', 'elevation') }}"
+  last_elevation: "{% if has_last %}{{ trigger.from_state.attributes.elevation }}{% else %}{{ elevation }}{% endif %}"
 
   force_turn_on: "{{ turn_on and not rising and last_elevation != \"\" and last_elevation >= start_setting|float and elevation <= start_setting|float }}"
   force_turn_off: "{{ turn_off and rising and last_elevation != \"\" and last_elevation <= end_rising|float and elevation >= end_rising|float }}"
 
   max_elevation: "{% if rising %}{{end_rising|float}}{% else %}{{start_setting|float}}{% endif %}"
   min_elevation: "{% if rising %}{{start_rising|float}}{% else %}{{end_setting|float}}{% endif %}"
+  last_max_elevation: "{% if last_rising %}{{end_rising|float}}{% else %}{{start_setting|float}}{% endif %}"
+  last_min_elevation: "{% if last_rising %}{{start_rising|float}}{% else %}{{end_setting|float}}{% endif %}"
   elevation_range: "{{ max_elevation - min_elevation }}"
+  last_elevation_range: "{{ last_max_elevation - last_min_elevation }}"
+
   brightness_range: "{{ max_brightness - min_brightness }}"
 
   delta_to_min: "{{ elevation - min_elevation }}"
-  last_delta_to_min: "{{ last_elevation|float - min_elevation }}"
+  last_delta_to_min: "{{ last_elevation|float - last_min_elevation }}"
 
-  full_percent: "{% if delta_to_min / elevation_range < 0 %}0{% elif delta_to_min / elevation_range > 1 %}1{% else %}{{delta_to_min / elevation_range}}{% endif %}"
-  last_full_percent: "{% if last_delta_to_min / elevation_range < 0 %}0{% elif last_delta_to_min / elevation_range > 1 %}1{% else %}{{last_delta_to_min / elevation_range}}{% endif %}"
+  full_percent_raw: "{% if delta_to_min / elevation_range < 0 %}0{% elif delta_to_min / elevation_range > 1 %}1{% else %}{{delta_to_min / elevation_range}}{% endif %}"
+  full_percent: "{% if reverse %}{{1 - full_percent_raw}}{% else %}{{full_percent_raw}}{% endif %}"
+  last_full_percent_raw: "{% if last_delta_to_min / elevation_range < 0 %}0{% elif last_delta_to_min / elevation_range > 1 %}1{% else %}{{last_delta_to_min / elevation_range}}{% endif %}"
+  last_full_percent: "{% if reverse %}{{1 - last_full_percent_raw}}{% else %}{{last_full_percent_raw}}{% endif %}"
 
   brightness_pct: "{{ full_percent * brightness_range + min_brightness }}"
   last_brightness_pct: "{{ last_full_percent * brightness_range + min_brightness }}"
