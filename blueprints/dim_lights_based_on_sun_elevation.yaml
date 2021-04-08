@@ -206,7 +206,7 @@ variables:
   elevation: "{{ state_attr('sun.sun', 'elevation') }}"
   last_elevation: "{% if has_last %}{{ trigger.from_state.attributes.elevation }}{% else %}{{ elevation }}{% endif %}"
 
-  force_turn_on: "{{ turn_on and not rising and last_elevation != \"\" and last_elevation >= start_setting|float and elevation <= start_setting|float }}"
+  force_turn_on: "{{ turn_on and not rising and last_elevation != \"\" and last_elevation >= end_setting|float and elevation <= start_setting|float }}"
   force_turn_off: "{{ turn_off and rising and last_elevation != \"\" and last_elevation <= end_rising|float and elevation >= end_rising|float }}"
 
   max_elevation: "{% if rising %}{{end_rising|float}}{% else %}{{start_setting|float}}{% endif %}"
