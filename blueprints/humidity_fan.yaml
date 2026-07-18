@@ -1,0 +1,353 @@
+# Humidity controlled ventilation fan, blueprint edition.
+#
+# Meaning, distilled from the old AppDaemon app: the wetter the room is
+# compared to the rest of the home, the faster the fan runs. The fan never
+# stops (floor 20 percent) unless an allow-off override is active, and it
+# runs at least at a boost speed while the room is in use.
+#
+# Anti oscillation is stateless hysteresis: raising uses the thresholds as
+# configured, lowering requires the difference to fall a margin below them.
+# Lowering is additionally held off by a timer helper, giving a minimum run
+# time after each raise. Only a raise starts the timer, a hold lets it run
+# down, so a genuinely lower demand steps down once the window has expired.
+#
+# Helpers you create once per fan:
+#     timer.<fan>_min_run   set its default duration to the minimum run time
+# Optional, can be shared by all fans:
+#     input_boolean.fans_allow_off   winter mode, lets fans stop completely
+# Optional history helpers, one per fan:
+#     input_number.<fan>_commanded   stores the commanded speed each cycle
+#     input_number.<fan>_humidity_diff   stores the humidity difference
+
+blueprint:
+    name: Humidity controlled ventilation fan
+    description: >-
+        Runs a multi speed fan from the humidity difference between a room
+        sensor and the average of baseline sensors. Bigger difference means
+        higher speed. The fan always runs at 20 percent or more unless an
+        allow-off entity is on. Boost entities (lights and similar) enforce
+        a minimum speed while the room is in use. Only a raise starts the
+        minimum run timer, so lowering happens once that window expires.
+        Optional input_number helpers record the commanded speed and the
+        humidity difference for history.
+    domain: automation
+    input:
+        entities:
+            name: Entities
+            icon: mdi:fan
+            input:
+                fan:
+                    name: Fan
+                    selector:
+                        entity:
+                            domain: fan
+                monitor:
+                    name: Room humidity sensor
+                    selector:
+                        entity:
+                            domain: sensor
+                baselines:
+                    name: Baseline humidity sensors
+                    description: Averaged, unavailable sensors are skipped
+                    selector:
+                        entity:
+                            domain: sensor
+                            multiple: true
+                min_run_timer:
+                    name: Minimum run timer helper (optional)
+                    description: >-
+                        Optional. If set, lowering waits until this timer has
+                        expired, giving a minimum run time after each raise.
+                        Create one timer helper per fan and set its default
+                        duration to the minimum time. Leave empty to lower on
+                        hysteresis alone.
+                    default: ""
+                    selector:
+                        entity:
+                            domain: timer
+                commanded_speed_helper:
+                    name: Commanded speed helper (optional)
+                    description: >-
+                        Optional input_number. If set, the speed the
+                        controller decides on is written here every cycle so
+                        you get a history of the commanded speed. Give it a
+                        0 to 100 range.
+                    default: ""
+                    selector:
+                        entity:
+                            domain: input_number
+                humidity_diff_helper:
+                    name: Humidity difference helper (optional)
+                    description: >-
+                        Optional input_number. If set, the humidity difference
+                        between the room and the baseline average is written
+                        here every cycle for history. Give it a range that
+                        covers negative values, for example -50 to 50.
+                    default: ""
+                    selector:
+                        entity:
+                            domain: input_number
+        thresholds:
+            name: Speed thresholds
+            icon: mdi:speedometer
+            input:
+                t40:
+                    name: Difference for 40 percent
+                    default: 6
+                    selector:
+                        number:
+                            min: 1
+                            max: 40
+                            step: 0.5
+                            unit_of_measurement: "%RH"
+                t60:
+                    name: Difference for 60 percent
+                    default: 10
+                    selector:
+                        number:
+                            min: 1
+                            max: 40
+                            step: 0.5
+                            unit_of_measurement: "%RH"
+                t80:
+                    name: Difference for 80 percent
+                    default: 15
+                    selector:
+                        number:
+                            min: 1
+                            max: 40
+                            step: 0.5
+                            unit_of_measurement: "%RH"
+                t100:
+                    name: Difference for 100 percent
+                    default: 20
+                    selector:
+                        number:
+                            min: 1
+                            max: 40
+                            step: 0.5
+                            unit_of_measurement: "%RH"
+                hysteresis:
+                    name: Lowering hysteresis
+                    description: >-
+                        The difference must fall this much below a threshold
+                        before the speed is lowered
+                    default: 2
+                    selector:
+                        number:
+                            min: 0
+                            max: 10
+                            step: 0.5
+                            unit_of_measurement: "%RH"
+        behavior:
+            name: Behavior
+            icon: mdi:tune
+            input:
+                boost_entities:
+                    name: Boost entities
+                    description: >-
+                        While any of these is on the fan runs at least at the
+                        boost speed, typically the room lights
+                    default: []
+                    selector:
+                        entity:
+                            multiple: true
+                boost_speed:
+                    name: Boost speed
+                    default: 40
+                    selector:
+                        number:
+                            min: 20
+                            max: 100
+                            step: 20
+                            unit_of_measurement: "%"
+                allow_off_entities:
+                    name: Allow off entities
+                    description: >-
+                        While any of these is on the fan may stop completely,
+                        for example a shared winter mode input_boolean.
+                        Without this the floor is always 20 percent.
+                    default: []
+                    selector:
+                        entity:
+                            multiple: true
+                debounce:
+                    name: Debounce
+                    description: Wait after a sensor change before acting
+                    default: 5
+                    selector:
+                        number:
+                            min: 0
+                            max: 60
+                            step: 1
+                            unit_of_measurement: s
+
+mode: restart
+max_exceeded: silent
+
+variables:
+    fan_entity: !input fan
+    monitor_entity: !input monitor
+    baseline_entities: !input baselines
+    boost_list: !input boost_entities
+    allow_off_list: !input allow_off_entities
+    min_run_timer: !input min_run_timer
+    commanded_speed_helper: !input commanded_speed_helper
+    humidity_diff_helper: !input humidity_diff_helper
+    v_t40: !input t40
+    v_t60: !input t60
+    v_t80: !input t80
+    v_t100: !input t100
+    v_hyst: !input hysteresis
+    v_boost_speed: !input boost_speed
+
+triggers:
+    - trigger: state
+      entity_id: !input monitor
+    - trigger: state
+      entity_id: !input baselines
+    - trigger: state
+      entity_id: !input boost_entities
+    - trigger: state
+      entity_id: !input allow_off_entities
+    - trigger: state
+      entity_id: !input fan
+    - trigger: event
+      event_type: timer.finished
+      event_data:
+          entity_id: !input min_run_timer
+    - trigger: homeassistant
+      event: start
+    - trigger: time_pattern
+      minutes: "/15"
+
+actions:
+    - delay:
+          seconds: !input debounce
+
+    - condition: template
+      value_template: "{{ is_number(states(monitor_entity)) }}"
+
+    - variables:
+          baseline_values: >-
+              {{ baseline_entities | map('states')
+                  | select('is_number') | map('float') | list }}
+
+    - condition: template
+      value_template: "{{ baseline_values | count > 0 }}"
+
+    - variables:
+          diff: >-
+              {{ states(monitor_entity) | float - baseline_values | average }}
+
+          current: >-
+              {% if is_state(fan_entity, 'on') %}
+              {{ state_attr(fan_entity, 'percentage') | int(0) }}
+              {% else %}
+              0
+              {% endif %}
+
+          # Speed the difference asks for when raising
+          up_speed: >-
+              {% if diff >= v_t100 | float %} 100
+              {% elif diff >= v_t80 | float %} 80
+              {% elif diff >= v_t60 | float %} 60
+              {% elif diff >= v_t40 | float %} 40
+              {% else %} 0
+              {% endif %}
+
+          # Speed the difference still justifies when lowering, thresholds
+          # are effectively lowered by the hysteresis margin
+          down_speed: >-
+              {% set d = diff + v_hyst | float %}
+              {% if d >= v_t100 | float %} 100
+              {% elif d >= v_t80 | float %} 80
+              {% elif d >= v_t60 | float %} 60
+              {% elif d >= v_t40 | float %} 40
+              {% else %} 0
+              {% endif %}
+
+          # Raise eagerly, lower reluctantly, otherwise hold
+          demand: >-
+              {% if up_speed | int > current | int %}
+              {{ up_speed | int }}
+              {% elif down_speed | int < current | int %}
+              {{ down_speed | int }}
+              {% else %}
+              {{ current | int }}
+              {% endif %}
+
+          boost_active: >-
+              {{ expand(boost_list) | selectattr('state', 'eq', 'on')
+                  | list | count > 0 }}
+
+          allow_off: >-
+              {{ expand(allow_off_list) | selectattr('state', 'eq', 'on')
+                  | list | count > 0 }}
+
+          # The fan always runs at 20 unless allowed to stop, and runs at
+          # least at the boost speed while the room is in use
+          floor_speed: >-
+              {% if boost_active %}
+              {{ v_boost_speed | int }}
+              {% elif allow_off %}
+              0
+              {% else %}
+              20
+              {% endif %}
+
+          target: "{{ [demand | int, floor_speed | int] | max }}"
+
+    # Record the commanded speed for history, every cycle including holds.
+    # Writing the same value again does not add a new history point.
+    - if: "{{ commanded_speed_helper != '' }}"
+      then:
+          - action: input_number.set_value
+            target:
+                entity_id: !input commanded_speed_helper
+            data:
+                value: "{{ target | int }}"
+
+    # Record the humidity difference for history, every cycle
+    - if: "{{ humidity_diff_helper != '' }}"
+      then:
+          - action: input_number.set_value
+            target:
+                entity_id: !input humidity_diff_helper
+            data:
+                value: "{{ diff | round(2) }}"
+
+    - choose:
+          # Raising happens immediately and, when a timer is configured,
+          # opens the minimum run window. Starting the timer without a
+          # duration uses the duration configured on the timer helper.
+          - conditions: "{{ target | int > current | int }}"
+            sequence:
+                - action: fan.set_percentage
+                  target:
+                      entity_id: !input fan
+                  data:
+                      percentage: "{{ target | int }}"
+                - if: "{{ min_run_timer != '' }}"
+                  then:
+                      - action: timer.start
+                        data:
+                            entity_id: "{{ min_run_timer }}"
+
+          # Lowering, immediately when no timer is configured, otherwise once
+          # the minimum run window has expired. The timer.finished trigger
+          # re-runs the automation for the pending lowering. A hold
+          # (target equal to current) matches no branch and is left alone,
+          # so the timer keeps counting down instead of being refreshed.
+          - conditions:
+                - condition: template
+                  value_template: "{{ target | int < current | int }}"
+                - condition: template
+                  value_template: >-
+                      {{ min_run_timer == '' or is_state(min_run_timer, 'idle') }}
+            sequence:
+                - action: fan.set_percentage
+                  target:
+                      entity_id: !input fan
+                  data:
+                      percentage: "{{ target | int }}"
